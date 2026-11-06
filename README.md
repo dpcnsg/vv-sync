@@ -1,1 +1,1 @@
-# vv-sync
+encrypted sync data
