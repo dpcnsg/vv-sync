@@ -1,0 +1,30 @@
+{
+ "v": 1,
+ "ver": "702bebf1b8ef7ccd",
+ "kdf": {
+  "name": "PBKDF2",
+  "hash": "SHA-256",
+  "iter": 1500000,
+  "salt": "2hciKfKy73ENIS/j/+/6eQ=="
+ },
+ "check": {
+  "iv": "D3x/YfKWlDL/bmNi",
+  "ct": "FxGC9glLPzkck7hUrc1Sx7zwSFTJ0DBtyCxD6HEQJTKBb5BKK08a4J00JY/UkE2u"
+ },
+ "books": [
+  "01",
+  "02",
+  "03",
+  "04",
+  "05",
+  "06",
+  "07",
+  "08",
+  "09",
+  "10",
+  "11",
+  "12",
+  "13",
+  "14"
+ ]
+}

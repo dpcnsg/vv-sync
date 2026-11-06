@@ -1,0 +1,15 @@
+{
+  "name": "victorview 밑줄펜",
+  "short_name": "밑줄펜",
+  "description": "책을 읽으며 밑줄과 메모를 남겨 한결에게 보내는 도구",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FBF7EE",
+  "theme_color": "#FBF7EE",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

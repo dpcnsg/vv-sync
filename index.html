@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#FBF7EE">
+<title>victorview 밑줄펜</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@700;900&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- Netlify Forms 감지용 숨은 양식 (화면에는 안 보임) -->
+<form name="mitjul" method="POST" data-netlify="true" netlify-honeypot="bot-field" hidden>
+  <input type="hidden" name="form-name" value="mitjul">
+  <input name="name"><input name="book"><input name="page">
+  <textarea name="text"></textarea><textarea name="memo"></textarea>
+  <input name="kind"><input name="sent_at">
+  <input name="bot-field">
+</form>
+
+<!-- 카톡·네이버·인스타 안의 브라우저일 때 안내 띠 -->
+<div id="inappBar" class="inapp" hidden>
+  <span>크롬으로 열면 더 편해요</span>
+  <button id="inappOpen" class="open" type="button">크롬으로 열기</button>
+  <button id="inappClose" class="x" type="button" aria-label="안내 닫기">×</button>
+</div>
+
+<!-- 첫 화면: 책 목록 -->
+<main id="home" class="view">
+  <header class="top">
+    <div class="logo">victor<i>view</i> <span>밑줄펜</span></div>
+  </header>
+  <div class="wrap">
+    <section class="intro">
+      <h1>책을 읽다가<br>마음에 걸리는 문장에 <em>밑줄</em>을 그어 주세요.</h1>
+      <p>밑줄과 메모는 이 기기에 남고, 다 되면 한결에게 한 번에 보내요.</p>
+    </section>
+    <label class="namebox">
+      <span>내 이름</span>
+      <input id="nameInput" type="text" maxlength="30" autocomplete="name" value="소란요요">
+    </label>
+    <div class="homebar">
+      <button id="homeAnsBtn" class="btn ghost ansbtn" type="button" aria-label="톡방 (한결과 대화)">톡방 <b class="ansn"></b></button>
+      <button id="homeAllBtn" class="btn ghost" type="button">모두의 밑줄</button>
+      <button id="homeListBtn" class="btn ghost" type="button">내 밑줄 보기 <b id="homeCount">0</b></button>
+    </div>
+    <ol id="bookList" class="books" aria-label="책 목록"></ol>
+    <section class="settings" aria-label="설정">
+      <h2>설정</h2>
+      <button id="relockBtn" class="btn ghost wide" type="button">이 기기에서 잠금 다시 걸기</button>
+      <p class="muted">다른 사람이 이 기기를 쓸 때 눌러 주세요. 다음에 열 때 로그인 번호를 다시 물어요. 밑줄은 지워지지 않아요.</p>
+    </section>
+  </div>
+</main>
+
+<!-- 로그인 번호 (책 잠금) -->
+<div id="lock" class="lock" hidden role="dialog" aria-modal="true" aria-labelledby="lockTitle">
+  <form id="lockForm" class="lock-card" autocomplete="off">
+    <div class="logo">victor<i>view</i> <span>밑줄펜</span></div>
+    <h2 id="lockTitle">로그인 번호를 넣어 주세요</h2>
+    <p class="muted">한결에게 받은 8자리 숫자예요. 한 번 맞으면 이 기기에서는 다시 묻지 않아요.</p>
+    <input id="lockInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" aria-label="로그인 번호 8자리" placeholder="••••••••">
+    <p id="lockMsg" class="lock-msg" role="alert"></p>
+    <button id="lockBtn" class="btn primary wide" type="submit">열기</button>
+  </form>
+</div>
+
+<!-- 읽기 화면 -->
+<section id="reader" class="view" hidden>
+  <header class="top rtop">
+    <button id="backBtn" class="icon-btn" type="button" aria-label="책 목록으로">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="rtitle"><b id="bookTitle"></b><small id="bookSub"></small></div>
+    <button id="listBtn" class="btn small" type="button">내 밑줄 <b id="markCount">0</b></button>
+  </header>
+
+  <div id="scroller" class="scroller">
+    <div id="pages" class="pages"></div>
+    <div id="loading" class="loading">책을 펼치는 중…</div>
+  </div>
+
+  <!-- 한 장씩: 큰 이전/다음 단추 (웹뷰가 밀기를 가로채도 넘길 수 있게) -->
+  <div id="pageNav" class="pagenav">
+    <button id="prevBtn" class="btn" type="button">◀ 이전</button>
+    <button id="nextBtn" class="btn" type="button">다음 ▶</button>
+  </div>
+
+  <!-- 아래 도구 -->
+  <nav id="tools" class="tools" aria-label="읽기 도구">
+    <button id="penBtn" class="tool" type="button" aria-pressed="false" aria-label="펜 모드">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1.2-4.6L15.6 5a2 2 0 012.8 0l.6.6a2 2 0 010 2.8L8.6 18.8 4 20z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M13.5 7l3.5 3.5" stroke="currentColor" stroke-width="1.8"/></svg>
+      <span>펜</span>
+    </button>
+    <button id="searchBtn" class="tool" type="button" aria-label="책 안에서 찾기">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M15 15l5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>찾기</span>
+    </button>
+    <button id="zoomOut" class="tool" type="button" aria-label="작게">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>작게</span>
+    </button>
+    <button id="zoomIn" class="tool" type="button" aria-label="크게">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12M12 6v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>크게</span>
+    </button>
+    <button id="chatBtn" class="tool ansbtn" type="button" aria-label="톡방 (한결과 대화)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5c-4.7 0-8.5 2.9-8.5 6.5 0 2.3 1.5 4.3 3.8 5.4L6.5 20l4-2.4c.5.1 1 .1 1.5.1 4.7 0 8.5-2.9 8.5-6.5S16.7 4.5 12 4.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      <span>톡방</span><b class="ansn"></b>
+    </button>
+    <button id="allBtn" class="tool" type="button" aria-pressed="false" aria-label="모두의 밑줄 보기">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h11M4 15h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 11.5h11" stroke="#3B4C8C" stroke-width="2.4" stroke-linecap="round"/><circle cx="18.5" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M15 17.5c.6-2 2-3 3.5-3s2.9 1 3.5 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <span>모두</span>
+    </button>
+    <button id="viewBtn" class="tool" type="button" aria-label="보기 방식 바꾸기">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3.5" width="12" height="17" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2.5 12l2-2v4zM21.5 12l-2-2v4z" fill="currentColor"/></svg>
+      <span>한 장씩</span>
+    </button>
+    <button id="pageBtn" class="tool pg" type="button" aria-label="쪽 이동">
+      <b id="pageNow">1</b><span>/ <i id="pageTotal">1</i>쪽</span>
+    </button>
+  </nav>
+
+  <!-- 글자를 고르면 나오는 단추 -->
+  <div id="selBar" class="selbar" hidden>
+    <p id="selPreview"></p>
+    <div class="adj" aria-label="고른 글자 늘리고 줄이기">
+      <span>앞</span>
+      <button type="button" data-adj="s-" aria-label="앞으로 한 글자 늘리기">＋</button>
+      <button type="button" data-adj="s+" aria-label="앞에서 한 글자 줄이기">－</button>
+      <span class="gap">뒤</span>
+      <button type="button" data-adj="e-" aria-label="뒤에서 한 글자 줄이기">－</button>
+      <button type="button" data-adj="e+" aria-label="뒤로 한 글자 늘리기">＋</button>
+    </div>
+    <div class="row">
+      <button id="selLine" class="btn primary" type="button">밑줄</button>
+      <button id="selHl" class="btn hl" type="button">형광펜</button>
+      <button id="selMemo" class="btn" type="button">메모</button>
+      <button id="selCancel" class="btn ghost" type="button">취소</button>
+    </div>
+  </div>
+
+  <div id="penBar" class="penbar" hidden>
+    <div class="seg2" role="group" aria-label="펜 종류">
+      <button id="penLine" type="button" class="on">밑줄 펜</button>
+      <button id="penHl" type="button">형광펜 펜</button>
+      <button id="penOff" type="button">끄기</button>
+    </div>
+    <p id="penHint">글자 밑을 그으면 그 줄에 맞춰 곧게 바로잡아요. 두 손가락으로 넘겨요.</p>
+  </div>
+</section>
+
+<!-- 메모 쓰기 -->
+<div id="memoSheet" class="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="memoTitle">
+  <div class="sheet-card">
+    <h2 id="memoTitle">메모</h2>
+    <blockquote id="memoQuote"></blockquote>
+    <label class="field">
+      <span>의견이나 바꿀 문장 (짧게)</span>
+      <textarea id="memoText" rows="4" maxlength="1000" placeholder="예) '이 문장은 조금 길어요' / '○○로 바꾸면 어떨까요'"></textarea>
+    </label>
+    <div class="row">
+      <button id="memoSave" class="btn primary" type="button">저장</button>
+      <button id="memoSkip" class="btn" type="button">메모 없이</button>
+      <button id="memoDelete" class="btn danger" type="button" hidden>지우기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 질문 쓰기 (밑줄 없이) -->
+<div id="askSheet" class="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="askTitle">
+  <div class="sheet-card">
+    <h2 id="askTitle">질문</h2>
+    <p id="askBook" class="muted"></p>
+    <label class="field" id="askPageField">
+      <span>몇 쪽 이야기예요? (비우면 책 전체)</span>
+      <input id="askPage" type="number" inputmode="numeric" min="1" placeholder="책 전체">
+    </label>
+    <label class="field">
+      <span>궁금한 것</span>
+      <textarea id="askText" rows="4" maxlength="1000" placeholder="예) 이 장의 제목을 바꿔도 될까요?"></textarea>
+    </label>
+    <div class="row">
+      <button id="askSave" class="btn primary" type="button">저장</button>
+      <button id="askCancel" class="btn" type="button">닫기</button>
+      <button id="askDelete" class="btn danger" type="button" hidden>지우기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 내 밑줄 목록 --><aside id="panel" class="panel" hidden aria-labelledby="panelTitle">
+  <div class="panel-card">
+    <header class="panel-head">
+      <h2 id="panelTitle">내 밑줄</h2>
+      <button id="panelClose" class="icon-btn" type="button" aria-label="닫기">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+    <div class="seg" role="tablist">
+      <button id="fltBook" class="on" type="button" role="tab">이 책</button>
+      <button id="fltAll" type="button" role="tab">모든 책</button>
+    </div>
+    <button id="panelAllBtn" class="linkbtn" type="button">모두의 밑줄 목록 보기 →</button>
+    <ul id="markList" class="marks"></ul>
+    <footer class="panel-foot">
+      <div class="rvrow"><span id="reviewState" class="rvstate" hidden></span><button id="reviewBtn" class="btn small" type="button" hidden>이 책 검토 끝</button></div>
+      <p id="unsentInfo"></p>
+      <button id="sendBtn" class="btn primary wide" type="button">한결에게 보내기</button>
+      <button id="copyBtn" class="btn wide" type="button">카톡으로 복사</button>
+    </footer>
+  </div>
+</aside>
+
+<!-- 찾기 -->
+<div id="searchSheet" class="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="searchTitle">
+  <div class="sheet-card tall">
+    <h2 id="searchTitle">책 안에서 찾기</h2>
+    <form id="searchForm" class="row">
+      <input id="searchInput" type="search" placeholder="찾을 낱말" enterkeyhint="search">
+      <button class="btn primary" type="submit">찾기</button>
+    </form>
+    <p id="searchInfo" class="muted"></p>
+    <ul id="searchResults" class="results"></ul>
+    <div class="row"><button id="searchClose" class="btn ghost wide" type="button">닫기</button></div>
+  </div>
+</div>
+
+<!-- 쪽 이동 -->
+<div id="pageSheet" class="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="pageTitle">
+  <div class="sheet-card">
+    <h2 id="pageTitle">몇 쪽으로 갈까요?</h2>
+    <form id="pageForm" class="row">
+      <input id="pageInput" type="number" inputmode="numeric" min="1">
+      <button class="btn primary" type="submit">이동</button>
+    </form>
+    <div class="row"><button id="pageClose" class="btn ghost wide" type="button">닫기</button></div>
+  </div>
+</div>
+
+<!-- 처음 안내 -->
+<div id="guide" class="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+  <div class="sheet-card">
+    <h2 id="guideTitle">이렇게 써요</h2>
+    <ol class="guide">
+      <li>글자를 <b>길게 누르거나 끌어서</b> 고르면 <b>밑줄·형광펜·메모</b> 단추가 나와요.</li>
+      <li>고르기 어려우면 <b>펜</b>으로 긋거나 문지르고, 궁금한 건 <b>톡방</b>에 써요.</li>
+      <li>다 했으면 <b>내 밑줄 → 한결에게 보내기</b>를 눌러 주세요.</li>
+    </ol>
+    <div class="row"><button id="guideOk" class="btn primary wide" type="button">알겠어요</button></div>
+  </div>
+</div>
+
+<!-- 복사 대체 (클립보드가 막힌 경우) -->
+<div id="copySheet" class="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="copyTitle">
+  <div class="sheet-card tall">
+    <h2 id="copyTitle">아래 글을 길게 눌러 복사해 주세요</h2>
+    <textarea id="copyText" rows="10" readonly></textarea>
+    <div class="row">
+      <button id="copyMarkSent" class="btn primary" type="button">카톡으로 직접 보냈어요</button>
+      <button id="copyClose" class="btn ghost" type="button">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 톡방: 내 말(오른쪽) + 한결 말(왼쪽), 밑줄 카드 -->
+<aside id="ansPanel" class="panel chat" hidden aria-labelledby="ansTitle">
+  <div class="panel-card">
+    <header class="panel-head chathead">
+      <span class="cav big" aria-hidden="true">한</span>
+      <div class="chtitle"><h2 id="ansTitle">톡방 · 한결</h2><p id="ansGen"></p></div>
+      <button id="ansClose" class="icon-btn" type="button" aria-label="닫기">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+    <ul id="ansList" class="chatlist" aria-live="polite"></ul>
+    <footer class="chatfoot">
+      <button id="askCtx" class="askctx on" type="button" aria-pressed="true" hidden><i aria-hidden="true"></i><span id="askCtxLabel">이 쪽에 대해 묻기</span></button>
+      <div class="chatinput">
+        <textarea id="ansQ" rows="1" maxlength="1000" placeholder="메시지 입력" aria-label="한결에게 보낼 말"></textarea>
+        <button id="ansSend" class="btn primary" type="button">보내기</button>
+      </div>
+    </footer>
+  </div>
+</aside>
+<!-- 모두의 밑줄 목록 -->
+<aside id="allPanel" class="panel" hidden aria-labelledby="allTitle">
+  <div class="panel-card">
+    <header class="panel-head">
+      <h2 id="allTitle">모두의 밑줄</h2>
+      <button id="allClose" class="icon-btn" type="button" aria-label="닫기">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+    <p id="allGen" class="allgen"></p>
+    <label class="allpick">
+      <select id="allScopeSel" aria-label="어느 책의 밑줄을 볼지 고르기"></select>
+    </label>
+    <div id="allStatus" class="chips">
+      <button type="button" data-st="" class="on">전체</button>
+      <button type="button" data-st="대기">대기</button>
+      <button type="button" data-st="답함">답함</button>
+      <button type="button" data-st="반영">반영</button>
+      <button type="button" data-st="보류">보류</button>
+    </div>
+    <div id="allList" class="alllist"></div>
+  </div>
+</aside>
+
+<!-- 모두의 밑줄 하나 보기 -->
+<div id="allPop" class="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="allPopTitle">
+  <div class="sheet-card">
+    <h2 id="allPopTitle">밑줄 보기</h2>
+    <div id="allPopBody" class="allpop"></div>
+    <div class="row"><button id="allPopClose" class="btn ghost wide" type="button">닫기</button></div>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="js/books.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
