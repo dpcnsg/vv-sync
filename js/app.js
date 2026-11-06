@@ -784,7 +784,22 @@
   function redrawPage(num) { var p = cur && cur.pages[num - 1]; if (p) drawMarks(p); }
   pagesEl.addEventListener('click', function (e) {
     var g = e.target.closest && e.target.closest('.badge');
-    if (g) { var m = findMark(g.getAttribute('data-id')); if (m) openMemo(m, false); }
+    if (g) { var m = findMark(g.getAttribute('data-id')); if (m) openMemo(m, false); return; }
+    // 11/6 시장: 형광펜·밑줄 자체를 눌러도 메모 칸(고치기·지우기)이 열리게. 글자를 고르는 중이면 건드리지 않는다.
+    if (!cur || document.body.classList.contains('pen') || selectionActive()) return;
+    var pd = e.target.closest && e.target.closest('.page'); if (!pd) return;
+    var p = null; cur.pages.forEach(function (q) { if (q.div === pd) p = q; }); if (!p || !p.cssW) return;
+    var sc = pageScale(p), hit = null, x, y, ctm = p.svg.getScreenCTM && p.svg.getScreenCTM();
+    if (ctm) { var pt = p.svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; pt = pt.matrixTransform(ctm.inverse()); x = pt.x; y = pt.y; } // 표시와 같은 좌표(svg viewBox)로
+    else { var r = pd.getBoundingClientRect(); x = e.clientX - r.left; y = e.clientY - r.top; }
+    marks.forEach(function (m) {
+      if (hit || m.book !== cur.book.id || m.page !== p.num || !m.lines) return;
+      m.lines.forEach(function (L) {
+        var x1 = L[0] * sc, x2 = L[1] * sc, base = L[2] * sc, fh = L[3] * sc;
+        if (x >= x1 - 4 && x <= x2 + 4 && y >= base - fh - 4 && y <= base + fh * 0.5 + 6) hit = m;
+      });
+    });
+    if (hit) openMemo(hit, false);
   });
   function findMark(id) { for (var i = 0; i < marks.length; i++) if (marks[i].id === id) return marks[i]; return null; }
 
@@ -1010,7 +1025,7 @@
   $('memoSkip').addEventListener('click', function () { $('memoSheet').hidden = true; memoTarget = null; });
   $('memoDelete').addEventListener('click', function () {
     if (!memoTarget) return;
-    if (!confirm('이 밑줄을 지울까요?')) return;
+    if (!confirm(isHl(memoTarget) ? '이 형광펜을 지울까요?' : '이 밑줄을 지울까요?')) return;
     deleteMark(memoTarget.id); $('memoSheet').hidden = true; memoTarget = null;
   });
   function deleteMark(id) {
