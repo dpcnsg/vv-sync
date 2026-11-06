@@ -1221,9 +1221,9 @@
     } else {
       var hl = /형광/.test(o.kindLabel);
       body = '<div class="ccard" data-go="' + esc(o.book) + ':' + (+o.page || 1) + '" role="button" tabindex="0">' +
-        '<div class="cch"><span>' + esc(whereOf(o.book, o.page)) + '</span><b class="' + (hl ? 'k-hl' : 'k-line') + '">' + esc(o.kindLabel) + '</b></div>' +
+        '<div class="cch"><span>' + esc(whereOf(o.book, o.page)) + '</span><b class="' + (hl ? 'k-hl' : 'k-line') + '">' + esc(o.kindLabel) + ' ›</b></div>' +
         '<p class="ccq' + (hl ? ' hl' : '') + '">' + esc(o.text || '(펜 표시)') + '</p>' + (o.memo ? '<p class="ccm">' + esc(o.memo) + '</p>' : '') +
-        '<div class="ccgo">그 쪽으로 →</div></div>';
+        '</div>'; // 11/6 시장: 아래 작은 글씨 대신 카드 전체를 누르면 그 쪽으로
     }
     return '<li class="crow me">' + meta + body + '</li>';
   }
