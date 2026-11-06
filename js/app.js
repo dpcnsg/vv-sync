@@ -1321,7 +1321,7 @@
     var mine = ALL.items.filter(function (it) { return it.book === id && it.name === MAIN_REVIEWER; });
     if (!mine.length) return '';
     var done = mine.filter(function (it) { return it.status === '반영'; }).length;
-    return '<small class="allline">' + MAIN_SHORT + ' 밑줄 ' + mine.length + ' · 반영 ' + done + '</small>';
+    return '<small class="allline" data-allbook="' + esc(id) + '" role="button" tabindex="0">' + MAIN_SHORT + ' 밑줄 ' + mine.length + ' · 반영 ' + done + ' ›</small>';
   }
   // 옛 제출(위치 없음): 그 쪽 글자 층에서 text 를 찾아 글자 줄로 바꾼다. 못 찾으면 목록에만.
   function findTextLines(p, text) {
@@ -1449,6 +1449,12 @@
     if (!cur || cur.book.id !== id) { lsSet(K.last + id, pg); location.hash = 'b=' + id; } else goToPage(pg);
   });
   $('homeAllBtn').addEventListener('click', function () { openAll('all'); });
+  // 11/6 시장: 첫 화면 책 목록의 "소란 밑줄 N · 반영 N"을 누르면 그 책의 모두의 밑줄 목록이 열린다(책은 열리지 않음)
+  $('bookList').addEventListener('click', function (e) {
+    var t = e.target.closest && e.target.closest('[data-allbook]'); if (!t) return;
+    e.preventDefault(); e.stopPropagation();
+    openAll(t.getAttribute('data-allbook'));
+  }, true);
   $('panelAllBtn').addEventListener('click', function () { $('panel').hidden = true; openAll(cur ? 'book' : 'all'); });
   if (lsGet('mj:all', false)) { document.body.classList.add('showall'); $('allBtn').setAttribute('aria-pressed', 'true'); }
 

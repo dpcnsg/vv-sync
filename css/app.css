@@ -370,3 +370,4 @@ button.cs.bad { color: var(--dahong); font-weight: 700; }
 .allpick select:focus { outline: 2px solid var(--green); outline-offset: 1px; }
 .ccard { padding-bottom: 4px; }
 .ccard[role=button] { -webkit-tap-highlight-color: rgba(200,69,59,.08); }
+.books .t small.allline { display: inline-block; padding: 6px 10px 6px 0; margin: -2px 0; cursor: pointer; text-decoration: underline; text-decoration-color: rgba(59,76,140,.35); text-underline-offset: 3px; }
