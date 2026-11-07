@@ -1792,6 +1792,20 @@
   $('nextBtn').addEventListener('click', function () { turn(1); });
   document.body.classList.toggle('zoomed', (lsGet(K.zoom, 1) || 1) > 1.001);
 
+  /* ---------- 듣기(js/listen.js)에 지금 쪽 글자만 빌려주기 (읽기 전용) ---------- */
+  window.MJ_HOST = {
+    isOpen: function () { return !!(cur && cur.pdf) && !$('reader').hidden; },
+    bookId: function () { return cur && cur.book ? cur.book.id : ''; },
+    page: function () { return currentPage(); },
+    pages: function () { return cur && cur.pdf ? cur.pdf.numPages : 0; },
+    go: function (n) { if (cur && cur.pdf && n >= 1 && n <= cur.pdf.numPages) goToPage(n, false); },
+    text: function (n) {
+      if (!cur || !cur.pdf) return Promise.reject(new Error('책이 닫혀 있음'));
+      var pdf = cur.pdf;
+      return Promise.all([getText(n), pdf.getPage(n)]).then(function (r) { return { items: r[0].items, view: r[1].view }; });
+    }
+  };
+
   setView(lsGet(K.view, 'paged'), true); // 기본은 한 장씩, 고른 값은 기기에 기억
   initLock();
 })();

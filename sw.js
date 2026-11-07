@@ -1,10 +1,10 @@
 /* victorview 밑줄펜 service worker — 앱 껍데기 + 연 책을 저장해 오프라인에서도 읽고 밑줄 긋기 */
-var VERSION = 'mj-v14';
+var VERSION = 'mj-v15';
 var SHELL = VERSION + '-shell';
 var BOOKS = 'mj-books-v2'; // 잠긴 .enc만 (풀린 PDF는 저장하지 않음)
 var CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 var SHELL_FILES = [
-  './', 'index.html', 'css/app.css', 'js/app.js', 'js/books.js', 'manifest.webmanifest', 'icons/icon.svg',
+  './', 'index.html', 'css/app.css', 'js/app.js', 'js/listen.js', 'js/books.js', 'manifest.webmanifest', 'icons/icon.svg',
   CDN + 'pdf.min.js', CDN + 'pdf.worker.min.js'
 ];
 
