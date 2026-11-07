@@ -488,7 +488,7 @@
     var s = window.getSelection();
     return !!(s && !s.isCollapsed && s.rangeCount && pagesEl.contains(s.getRangeAt(0).commonAncestorContainer));
   }
-  function anySheetOpen() { return ['memoSheet', 'searchSheet', 'pageSheet', 'copySheet', 'askSheet', 'panel', 'guide', 'lock', 'allPanel', 'allPop', 'ansPanel'].some(function (id) { return $(id) && !$(id).hidden; }); }
+  function anySheetOpen() { return ['memoSheet', 'searchSheet', 'pageSheet', 'copySheet', 'askSheet', 'panel', 'guide', 'lock', 'allPanel', 'allPop', 'ansPanel', 'lsSheet'].some(function (id) { return $(id) && !$(id).hidden; }); }
   // 밀기·가장자리 누르기로 넘겨도 되는가: 글자 고르는 중, 펜, 확대 중, 창이 열렸을 때는 안 된다
   function canTurnGesture() {
     return cur && cur.pdf && isPaged() && !document.body.classList.contains('pen') && !selectionActive() && cur.zoom <= 1.001 && !anySheetOpen();
@@ -1803,6 +1803,16 @@
       if (!cur || !cur.pdf) return Promise.reject(new Error('책이 닫혀 있음'));
       var pdf = cur.pdf;
       return Promise.all([getText(n), pdf.getPage(n)]).then(function (r) { return { items: r[0].items, view: r[1].view }; });
+    },
+    // 11/7 우리 목소리: books/audio/<책>/ 의 잠긴 오디오(encrypt_audio.py)만 푼다. 열쇠는 넘기지 않고, 용도는 오디오 둘로만 묶는다.
+    lockVer: function () { return LOCK.meta ? LOCK.meta.ver : ''; },
+    unseal: function (buf, kind) {
+      var info = { audio: 'mitjul-audio', list: 'mitjul-audio-list' }[kind];
+      if (!info || !LOCK.key) return Promise.reject(new Error('locked'));
+      var u = new Uint8Array(buf);
+      if (u.length < 48 || String.fromCharCode(u[0], u[1], u[2], u[3]) !== 'MJE1') return Promise.reject(new Error('형식'));
+      return subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: u.slice(4, 20), info: enc.encode(info) }, LOCK.key, { name: 'AES-GCM', length: 256 }, false, ['decrypt'])
+        .then(function (k) { return subtle.decrypt({ name: 'AES-GCM', iv: u.slice(20, 32), additionalData: enc.encode(info) }, k, u.subarray(32)); });
     }
   };
 
