@@ -116,11 +116,12 @@
   if (!doc || !synth || typeof root.SpeechSynthesisUtterance === 'undefined') return; // 읽기 기능이 없는 기기: 단추를 만들지 않는다
 
   var KEY = 'mj:listen', PITCH = 0.95;
+  var PITCH_BY = { f: 1.0, m: 0.95 }; // 부드러운 책 읽기: 여자는 원래 높이, 남자는 살짝 낮게(2026-11-07 시장)
   var saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
   var S = { queue: [], i: 0, page: 0, book: '', playing: false, paused: false, loading: false, voice: null,
-    rate: saved.rate || 0.9, cont: saved.cont !== false, carry: '', heads: {}, timer: null, gen: 0, selfTurn: 0 };
+    rate: saved.rate || 0.9, gender: saved.gender || 'f', cont: saved.cont !== false, carry: '', heads: {}, timer: null, gen: 0, selfTurn: 0 };
   function host() { return root.MJ_HOST || null; }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify({ rate: S.rate, cont: S.cont, voice: S.voice && S.voice.name })); } catch (e) {} }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify({ rate: S.rate, cont: S.cont, gender: S.gender, voice: S.voice && S.voice.name })); } catch (e) {} }
 
   var css =
     '.tools{grid-template-columns:repeat(8,1fr)}' +
@@ -130,7 +131,7 @@
     '.lsbar button,.lsbar select{min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink);font:inherit;cursor:pointer}' +
     '.lsbar button{min-width:44px;font-size:17px;padding:0 8px}' +
     '.lsbar .ls-main{background:var(--dahong);border-color:var(--dahong);color:#fff}' +
-    '.lsbar .ls-cont{font-size:13px;font-weight:700}.lsbar .ls-cont[aria-pressed="true"]{background:#FFF4F1;border-color:var(--dahong);color:var(--dahong)}' +
+    '.lsbar .ls-cont,.lsbar .ls-gender{font-size:13px;font-weight:700}.lsbar .ls-cont[aria-pressed="true"]{background:#FFF4F1;border-color:var(--dahong);color:var(--dahong)}' +
     '.lsbar select{padding:0 4px;max-width:30%}' +
     '.lsbar .ls-t{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--ink-2)}' +
     '@media (max-width:480px){.lsbar{gap:4px;padding:5px}.lsbar button{min-width:40px;padding:0 6px}.lsbar .ls-voice{display:none}}';
@@ -147,32 +148,42 @@
   bar.innerHTML = '<button type="button" class="ls-main" aria-label="재생">▶</button>' +
     '<button type="button" class="ls-stop" aria-label="정지">⏹</button>' +
     '<span class="ls-t" aria-live="polite"></span>' +
+    '<button type="button" class="ls-gender" aria-label="목소리 바꾸기(여자/남자)">여자</button>' +
     '<button type="button" class="ls-cont" aria-pressed="true" aria-label="다음 쪽 이어 읽기">이어</button>' +
     '<select class="ls-rate" aria-label="읽는 빠르기"><option value="0.8">천천히</option><option value="0.9">편지</option><option value="1">보통</option><option value="1.15">빠르게</option></select>' +
     '<select class="ls-voice" aria-label="목소리"></select>';
   var reader = doc.getElementById('reader'); (reader || doc.body).appendChild(bar);
   var mainB = bar.querySelector('.ls-main'), stopB = bar.querySelector('.ls-stop'), info = bar.querySelector('.ls-t'),
-    contB = bar.querySelector('.ls-cont'), rateSel = bar.querySelector('.ls-rate'), voiceSel = bar.querySelector('.ls-voice');
+    contB = bar.querySelector('.ls-cont'), genB = bar.querySelector('.ls-gender'), rateSel = bar.querySelector('.ls-rate'), voiceSel = bar.querySelector('.ls-voice');
   rateSel.value = String(S.rate); if (!rateSel.value) { rateSel.value = '0.9'; S.rate = 0.9; }
 
-  // 목소리: 자연스러운 한국어 목소리 먼저
+  // 목소리: 부드러운 한국어 목소리 먼저, 여자·남자로 나눈다(2026-11-07 시장 "최대한 부드러운 책 읽어주는 음성, 남자 여자로 구분")
+  // 이름으로 성별을 가린다(읽기 API는 성별을 알려 주지 않음). 엣지: SunHi·InJoon·Hyunsu 신경망, 안드로이드 구글: ism·kob(여)·koc·kod(남), 삼성: f·m, 애플: Yuna·Sora(여)·Minsu(남)
+  var F_RE = /sunhi|선희|heami|해미|yuna|유나|sora|소라|jimin|지민|seohyeon|서현|soonbok|순복|yujin|유진|seoyeon|서연|x-ism|x-kob|smtf|google 한국의|female|여성|여자/i;
+  var M_RE = /injoon|인준|hyunsu|현수|bongjin|봉진|gookmin|국민|minsu|민수|jinho|진호|x-koc|x-kod|smtm|(^|[^e])male|남성|남자/i;
+  function genderOf(v) { var n = (v.name || '') + ' ' + (v.voiceURI || ''); if (F_RE.test(n)) return 'f'; if (M_RE.test(n)) return 'm'; return ''; }
   function rankVoice(v) {
     var n = (v.name || '').toLowerCase(), s = 0;
     if (!/^ko/i.test(v.lang || '')) return -1;
-    if (/natural|neural|online/.test(n)) s += 50;
+    if (/natural|neural|online|multilingual|premium|enhanced|고품질/.test(n)) s += 50;  // 신경망·고품질이 가장 부드럽다
     if (/google/.test(n)) s += 30;
-    if (/sunhi|선희|yuna|유나|heami/.test(n)) s += 10;
-    if (v.localService) s += 2;
+    if (/sunhi|선희|injoon|인준|hyunsu|현수|yuna|유나/.test(n)) s += 10;
+    if (!v.localService) s += 3;   // 온라인 목소리가 대개 더 자연스럽다
     return s;
   }
   function koVoices() { return synth.getVoices().filter(function (v) { return rankVoice(v) >= 0; }).sort(function (a, b) { return rankVoice(b) - rankVoice(a); }); }
+  function bestOf(g) { var l = koVoices().filter(function (v) { return genderOf(v) === g; }); return l[0] || null; }
+  function showGender() { genB.textContent = S.gender === 'm' ? '남자' : '여자'; genB.setAttribute('aria-pressed', 'true'); }
   function pickVoice() {
     var list = koVoices();
-    S.voice = list.find(function (v) { return v.name === saved.voice; }) || list[0] || null;
+    var keep = list.find(function (v) { return v.name === saved.voice && (genderOf(v) === S.gender || !genderOf(v)); });
+    S.voice = keep || bestOf(S.gender) || list[0] || null;
+    if (S.voice && genderOf(S.voice)) S.gender = genderOf(S.voice);
     voiceSel.innerHTML = '';
-    list.forEach(function (v) { var o = doc.createElement('option'); o.value = v.name; o.textContent = v.name.replace(/Microsoft |Google |\(.*?\)| - .*$/g, '').trim() || v.name; voiceSel.appendChild(o); });
+    list.forEach(function (v) { var g = genderOf(v); var o = doc.createElement('option'); o.value = v.name; o.textContent = (g === 'f' ? '여 · ' : g === 'm' ? '남 · ' : '') + (v.name.replace(/Microsoft |Google |\(.*?\)| - .*$/g, '').trim() || v.name); voiceSel.appendChild(o); });
     voiceSel.style.display = list.length > 1 ? '' : 'none';
     if (S.voice) voiceSel.value = S.voice.name;
+    showGender();
   }
 
   function show() {
@@ -245,7 +256,7 @@
     var it = S.queue[S.i];
     var u = new root.SpeechSynthesisUtterance(it.text);
     u.lang = S.voice ? S.voice.lang : 'ko-KR'; if (S.voice) u.voice = S.voice;
-    u.rate = S.rate; u.pitch = PITCH;
+    u.rate = S.rate; u.pitch = PITCH_BY[S.voice && genderOf(S.voice) || S.gender] || PITCH;
     u.onend = function () {
       if (gen !== S.gen || !S.playing || S.paused) return;
       S.i++; S.timer = setTimeout(function () { speakNext(gen); }, it.gap ? 650 : 180);
@@ -274,7 +285,13 @@
     toast(S.cont ? '쪽 끝에서 다음 쪽으로 이어 읽어요.' : '이 쪽까지만 읽어요.');
   });
   rateSel.addEventListener('change', function () { S.rate = parseFloat(rateSel.value) || 0.9; save(); if (S.playing && !S.paused) { synth.cancel(); speakNext(S.gen); } });
-  voiceSel.addEventListener('change', function () { S.voice = koVoices().find(function (v) { return v.name === voiceSel.value; }) || S.voice; save(); if (S.playing && !S.paused) { synth.cancel(); speakNext(S.gen); } });
+  genB.addEventListener('click', function () {
+    var want = S.gender === 'm' ? 'f' : 'm', v = bestOf(want);
+    if (!v) { toast(want === 'm' ? '이 기기에는 남자 한국어 목소리가 없어요.' : '이 기기에는 여자 한국어 목소리가 없어요.'); return; }
+    S.gender = want; S.voice = v; voiceSel.value = v.name; showGender(); save();
+    if (S.playing && !S.paused) { synth.cancel(); speakNext(S.gen); }
+  });
+  voiceSel.addEventListener('change', function () { S.voice = koVoices().find(function (v) { return v.name === voiceSel.value; }) || S.voice; if (genderOf(S.voice)) { S.gender = genderOf(S.voice); showGender(); } save(); if (S.playing && !S.paused) { synth.cancel(); speakNext(S.gen); } });
 
   // 책 목록으로 나가면 멈춤
   root.addEventListener('hashchange', function () { setTimeout(function () { var h = host(); if ((S.playing || S.paused) && (!h || !h.isOpen())) stop(); }, 50); });
