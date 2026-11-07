@@ -8,7 +8,10 @@
    2026-11-07 시장 "이번에 만든 목소리들을 선택하게": 막대의 목소리 단추 → 작은 창에서 기기 목소리(여자/남자)와
    우리 목소리(Supertonic 3 견본 9개, AI 음성 표시, ▶ 미리 듣기 audio/samples/*.mp3) 중 고른다.
    우리 목소리를 고르고 그 책에 books/audio/<책>/list.enc 가 있으면 장 단위로 튼다(앞뒤 장·빠르기=playbackRate·이어 듣기).
-   잠긴 오디오는 app.js 의 MJ_HOST.unseal(오디오 용도만)로 풀고, 풀린 소리는 메모리(Blob)에만 둔다. 없으면 기기 목소리로. */
+   잠긴 오디오는 app.js 의 MJ_HOST.unseal(오디오 용도만)로 풀고, 풀린 소리는 메모리(Blob)에만 둔다. 없으면 기기 목소리로.
+   2026-11-07 시장 "휴대폰이나 PC에서 받아서 바로 사용, 남자 처음 3음·여자 나중 3음": '우리 목소리' = 기기 안 합성(js/voice-engine.js, Supertonic 3).
+   처음 한 번 모델(약 422MB)을 받으면 어느 책 어느 쪽이든 문장마다 합성해 읽는다(다음 문장은 미리 합성, 쉼은 목소리마다, 빠르기는 목소리 기본값에 곱함).
+   예전 견본 9개와 장별 낭독(books/audio) 틀은 창 맨 아래 '견본 듣기'로 옮겨 그대로 둔다. */
 (function (root) {
   'use strict';
 
@@ -174,11 +177,16 @@
   var KEY = 'mj:listen', POSKEY = 'mj:listen:pos', PITCH = 0.95;
   var PITCH_BY = { f: 0.92, m: 0.95 }; // 부드러운 책 읽기: 여자는 원래 높이, 남자는 살짝 낮게(2026-11-07 시장)
   var saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
+  var E = root.MJVoice || null;   // 우리 목소리 엔진(js/voice-engine.js). 없으면 우리 목소리 칸은 숨김
+  function synVoiceOk(id) { return !!(E && E.voiceById(id)); }
   var S = { queue: [], i: 0, page: 0, book: '', playing: false, paused: false, loading: false, voice: null,
     rate: saved.rate || 0.9, gender: saved.gender || 'f', cont: saved.cont !== false, carry: '', heads: {}, timer: null, gen: 0, selfTurn: 0,
-    src: (saved.src === 'ours' || !hasSynth) ? 'ours' : 'device', ours: sampleById(saved.ours) ? saved.ours : 'f2', mode: '' };
+    src: (saved.src === 'synth' && E) ? 'synth' : saved.src === 'ours' ? 'ours' : !hasSynth ? (E ? 'synth' : 'ours') : 'device',
+    ours: sampleById(saved.ours) ? saved.ours : 'f2', syn: synVoiceOk(saved.syn) ? saved.syn : 'sm1', mode: '' };
+  // 우리 목소리(기기 안 합성) 상태: 문장 소리 저장(map: 열쇠→약속), 다음 쪽 미리 읽기(np), 소리 크기 맞춤(peak), 시험용 기록(log)
+  var T = { map: {}, keys: [], np: null, peak: 0, first: 0, prep: false, warned: false, log: [], url: '', cur: '' };
   function host() { return root.MJ_HOST || null; }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify({ rate: S.rate, cont: S.cont, gender: S.gender, voice: S.voice && S.voice.name, src: S.src, ours: S.ours })); } catch (e) {} }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify({ rate: S.rate, cont: S.cont, gender: S.gender, voice: S.voice && S.voice.name, src: S.src, ours: S.ours, syn: S.syn })); } catch (e) {} }
 
   var css =
     '.tools{grid-template-columns:repeat(8,1fr)}' +
@@ -203,7 +211,11 @@
     '.ls-pick{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;text-align:left;min-height:52px;padding:6px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:inherit;cursor:pointer}' +
     '.ls-pick b{font-size:15px}.ls-pick span{font-size:13px;color:var(--ink-2);font-weight:400}.ls-pick i{font-style:normal;font-size:12px;font-weight:700;color:var(--green);margin-left:6px}' +
     '.ls-try{flex:none;width:52px;min-height:52px;border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink);font-size:17px;cursor:pointer}.ls-try[aria-pressed="true"]{background:var(--dahong);border-color:var(--dahong);color:#fff}' +
-    '.ls-ai{margin:0;font-size:13px;color:var(--ink-2)}';
+    '.ls-ai{margin:0;font-size:13px;color:var(--ink-2)}' +
+    '.ls-dl{display:flex;flex-direction:column;gap:6px}.ls-get{min-height:48px;border:1px solid var(--dahong);border-radius:12px;background:var(--dahong);color:#fff;font:inherit;font-weight:700;cursor:pointer;padding:0 12px}' +
+    '.ls-prog{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)}.ls-prog progress{flex:1;min-width:0;height:10px;accent-color:var(--dahong)}' +
+    '.ls-prog button{flex:none;min-height:44px;min-width:56px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit;cursor:pointer}' +
+    '.ls-list.off .ls-pick{opacity:.55}.ls-sec.ls-old h3{color:var(--ink-2)}';
   var st = doc.createElement('style'); st.textContent = css; doc.head.appendChild(st);
 
   // 도구 줄 단추 (쪽 이동 단추 앞)
@@ -235,8 +247,16 @@
     '<section class="ls-sec"><h3>기기 목소리</h3><p class="muted">이 기기에 들어 있는 목소리예요. 모든 책을 읽어요.</p>' +
     '<div class="ls-seg" role="radiogroup" aria-label="기기 목소리"><button type="button" role="radio" data-dev="f">여자</button><button type="button" role="radio" data-dev="m">남자</button></div>' +
     '<select class="ls-voice" aria-label="기기 목소리 이름"></select></section>' +
-    '<section class="ls-sec"><h3>우리 목소리<small>AI 음성</small></h3><p class="muted ls-note"></p>' +
-    '<ul class="ls-list" role="radiogroup" aria-label="우리 목소리">' + SAMPLES.map(function (s) {
+    (E ? '<section class="ls-sec ls-syn"><h3>우리 목소리<small>AI 음성</small></h3><p class="muted ls-synnote"></p>' +
+    '<div class="ls-dl"><button type="button" class="ls-get">우리 목소리 받기(약 ' + E.totalMB + 'MB, 와이파이 권장)</button>' +
+    '<div class="ls-prog" hidden><progress max="100" value="0"></progress><span class="ls-pt" aria-live="polite"></span><button type="button" class="ls-cancel">취소</button></div></div>' +
+    '<ul class="ls-list ls-synlist" role="radiogroup" aria-label="우리 목소리">' + E.VOICES.map(function (v) {
+      return '<li><button type="button" class="ls-pick" role="radio" data-syn="' + v.id + '"><b>' + v.name + '</b><span>' + v.note + '</span></button>' +
+        '<button type="button" class="ls-try" data-try="' + v.sample + '" aria-pressed="false" aria-label="' + v.name + ' 미리 듣기">▶</button></li>';
+    }).join('') + '</ul>' +
+    '<p class="ls-ai">AI 음성으로 읽었습니다.</p></section>' : '') +
+    '<section class="ls-sec ls-old"><h3>견본 듣기<small>AI 음성</small></h3><p class="muted ls-note"></p>' +
+    '<ul class="ls-list" role="radiogroup" aria-label="견본 목소리">' + SAMPLES.map(function (s) {
       return '<li><button type="button" class="ls-pick" role="radio" data-id="' + s.id + '"><b>' + s.name + '</b><span>' + s.note + '</span></button>' +
         '<button type="button" class="ls-try" data-try="' + s.id + '" aria-pressed="false" aria-label="' + s.name + ' 미리 듣기">▶</button></li>';
     }).join('') + '</ul>' +
@@ -274,11 +294,14 @@
   }
 
   function oursActive() { return S.mode ? S.mode === 'ours' : S.src === 'ours'; }
+  function synActive() { return S.mode ? S.mode === 'synth' : S.src === 'synth'; }
   function showVoice() {
-    vBtn.textContent = oursActive() ? '우리' : (S.gender === 'm' ? '남자' : '여자');
-    vBtn.setAttribute('aria-label', '목소리 고르기 (지금: ' + (oursActive() ? '우리 목소리 ' + (sampleById(S.ours) || {}).name : '기기 ' + vBtn.textContent) + ')');
+    var sv = E && E.voiceById(S.syn);
+    vBtn.textContent = synActive() ? '우리' : oursActive() ? '견본' : (S.gender === 'm' ? '남자' : '여자');
+    vBtn.setAttribute('aria-label', '목소리 고르기 (지금: ' + (synActive() ? '우리 목소리 ' + (sv ? sv.name : '') : oursActive() ? '견본 ' + (sampleById(S.ours) || {}).name : '기기 ' + vBtn.textContent) + ')');
     Array.prototype.forEach.call(sheet.querySelectorAll('[data-dev]'), function (b) { b.setAttribute('aria-checked', S.src === 'device' && b.getAttribute('data-dev') === S.gender ? 'true' : 'false'); b.disabled = !hasSynth; });
-    Array.prototype.forEach.call(sheet.querySelectorAll('.ls-pick'), function (b) { b.setAttribute('aria-checked', S.src === 'ours' && b.getAttribute('data-id') === S.ours ? 'true' : 'false'); });
+    Array.prototype.forEach.call(sheet.querySelectorAll('.ls-pick[data-id]'), function (b) { b.setAttribute('aria-checked', S.src === 'ours' && b.getAttribute('data-id') === S.ours ? 'true' : 'false'); });
+    Array.prototype.forEach.call(sheet.querySelectorAll('.ls-pick[data-syn]'), function (b) { b.setAttribute('aria-checked', S.src === 'synth' && b.getAttribute('data-syn') === S.syn ? 'true' : 'false'); });
   }
 
   function show() {
@@ -294,6 +317,9 @@
       var c = A.list && A.list.chapters[A.i];
       info.textContent = (S.loading ? '불러오는 중… ' : '') + (c ? c.title : '') + ' · AI 음성';
       prevB.disabled = stepChapter(A.list, A.i, -1) < 0; nextB.disabled = stepChapter(A.list, A.i, 1) < 0;
+    } else if (S.mode === 'synth') {
+      var it2 = S.queue[S.i];
+      info.textContent = (T.prep ? '목소리 준비 중… ' : S.loading ? S.page + '쪽 읽을 준비… ' : (S.page ? S.page + '쪽 · ' : '') + (it2 ? it2.text + ' · ' : '')) + 'AI 음성';
     } else {
       var it = S.queue[S.i];
       info.textContent = S.loading ? S.page + '쪽 읽을 준비…' : (S.page ? S.page + '쪽' : '') + (it ? ' · ' + it.text : '');
@@ -304,27 +330,31 @@
 
   /* ---------- 기기 목소리: 쪽 글을 문장 단위로 ---------- */
   // 쪽 글 불러오기 → 문장 목록 (앞 쪽에서 끝나지 않은 문장은 이어 붙임)
+  // 한 쪽 읽기(상태는 바꾸지 않음): 앞 쪽에서 넘어온 글(carryIn)을 앞에 붙이고, 이 쪽 끝의 끝나지 않은 문장은 carry 로 돌려준다
+  function readPage(n, carryIn) {
+    var h = host(); if (!h || !h.isOpen()) return Promise.reject(new Error('closed'));
+    return h.text(n).then(function (r) {
+      var q = pageSentences(r.items, r.view, S.heads), carry = '';
+      if (carryIn) { if (q.length) q[0].text = carryIn + ' ' + q[0].text; else q.push({ text: carryIn, gap: true }); }
+      // 쪽 끝 문장이 끝나지 않았고 이어 읽기면 다음 쪽 첫 문장과 붙여 읽는다
+      if (S.cont && q.length && n < h.pages() && !END.test(q[q.length - 1].text)) carry = q.pop().text;
+      return { q: q, carry: carry };
+    });
+  }
   function loadPage(n, gen) {
     var h = host(); if (!h || !h.isOpen()) return Promise.reject(new Error('closed'));
     S.loading = true; S.page = n; show();
-    return h.text(n).then(function (r) {
+    return readPage(n, S.carry).then(function (r) {
       if (gen !== S.gen) return null;
-      var q = pageSentences(r.items, r.view, S.heads);
-      if (S.carry) {
-        if (q.length) q[0].text = S.carry + ' ' + q[0].text; else q.push({ text: S.carry, gap: true });
-        S.carry = '';
-      }
-      // 쪽 끝 문장이 끝나지 않았고 이어 읽기면 다음 쪽 첫 문장과 붙여 읽는다
-      if (S.cont && q.length && n < h.pages() && !END.test(q[q.length - 1].text)) S.carry = q.pop().text;
-      S.queue = q; S.i = 0; S.loading = false;
-      return q;
+      S.queue = r.q; S.carry = r.carry; S.i = 0; S.loading = false;
+      return r.q;
     });
   }
 
   function startAt(n) {
     var h = host(); if (!h || !h.isOpen()) { toast(h ? '책을 연 뒤 들을 수 있어요.' : '새 판을 받는 중이에요. 앱을 닫았다 다시 열어 주세요.'); return; }
     if (!hasSynth) { toast('이 기기에는 기기 목소리가 없어요.'); stop(); return; }
-    stopOurs(); synth.cancel(); clearTimeout(S.timer);
+    stopOurs(); stopSyn(); synth.cancel(); clearTimeout(S.timer);
     var gen = ++S.gen; S.mode = 'device'; S.book = h.bookId(); S.carry = ''; S.playing = true; S.paused = false;
     loadPage(n, gen).then(function (q) {
       if (!q || gen !== S.gen) return;
@@ -376,6 +406,141 @@
     synth.speak(u);
   }
 
+  /* ---------- 우리 목소리: 기기 안 합성(Supertonic 3) — 어느 책 어느 쪽이든 문장마다 ---------- */
+  var SLOW_MS = 8000;
+  function synV() { return E && E.voiceById(S.syn); }
+  function synKey(it) { return S.syn + '|' + S.rate + '|' + (it.gap ? 1 : 0) + '|' + it.text; }
+  function dropSyn(keep) {   // 지금·다음 문장 말고는 소리를 버린다(메모리)
+    Object.keys(T.map).forEach(function (k) {
+      if (keep && keep.indexOf(k) >= 0) return;
+      var p = T.map[k]; delete T.map[k];
+      if (p.cancel) p.cancel();
+      p.then(function (r) { if (r && r.url && r.url !== T.url) URL.revokeObjectURL(r.url); }, noop);
+    });
+  }
+  // 한 문장 → { url(WAV, 뒤에 쉼 포함), sec, ms }. 같은 문장은 한 번만 합성
+  function prep(it) {
+    var k = synKey(it); if (T.map[k]) return T.map[k];
+    var v = synV(), gap = it.gap ? v.para : v.sent, sp = E.synth(it.text, v.id, S.rate / 0.9);
+    var p = sp.then(function (r) {
+      // narrate.py 는 파일 전체 최고점을 0.89로 맞춘다. 문장마다 흘려 읽으니 지금까지의 최고점으로 맞춘다(갑자기 커지지 않게)
+      T.peak = Math.max(T.peak * 0.98, r.peak || 0);
+      var gain = T.peak > 0 ? Math.min(4, 0.89 / T.peak) : 1;
+      var sec = r.pcm.length / r.sr;
+      T.log.push({ voice: v.id, chars: it.text.replace(/\s/g, '').length, sec: Math.round(sec * 100) / 100, ms: r.ms, rtf: Math.round(r.ms / 10 / Math.max(sec, 0.1)) / 100 });
+      if (T.log.length > 60) T.log.shift();
+      return { url: URL.createObjectURL(E.wav(r.pcm, r.sr, gap, gain)), sec: sec + gap, speech: sec, ms: r.ms };
+    });
+    p.cancel = sp.cancel;
+    p.catch(function () { if (T.map[k] === p) delete T.map[k]; });   // 실패·취소한 문장은 다음에 다시 합성
+    T.map[k] = p; return p;
+  }
+  function stopSyn() {
+    T.np = null; T.prep = false;
+    if (T.url && au.src === T.url) { try { au.pause(); } catch (e) {} au.removeAttribute('src'); try { au.load(); } catch (e) {} }
+    if (T.url) { URL.revokeObjectURL(T.url); T.url = ''; }
+    dropSyn([]); T.cur = '';
+  }
+  function failSyn(e, gen) {
+    if (gen !== S.gen) return;
+    console.warn('listen synth', e);
+    var h = host(), n = S.page || (h && h.isOpen() ? h.page() : 1);
+    if (hasSynth && h && h.isOpen()) { toast('우리 목소리를 내지 못했어요. 기기 목소리로 읽을게요.'); startAt(n); }
+    else { toast('우리 목소리를 내지 못했어요.'); stop(); }
+  }
+  function startSyn(n) {
+    var h = host(); if (!h || !h.isOpen()) { toast(h ? '책을 연 뒤 들을 수 있어요.' : '새 판을 받는 중이에요. 앱을 닫았다 다시 열어 주세요.'); return; }
+    if (!E) { startAt(n); return; }
+    unlockAudio();
+    stopOurs(); stopSyn(); synth.cancel(); clearTimeout(S.timer);
+    var gen = ++S.gen; S.mode = 'synth'; S.book = h.bookId(); S.carry = ''; S.playing = true; S.paused = false; S.loading = true; T.first = 0; T.warned = false;
+    show();
+    E.status().then(function (s) {
+      if (gen !== S.gen) return null;
+      if (!s.ready) { S.loading = false; S.mode = ''; S.playing = false; show(); toast('먼저 우리 목소리를 받아 주세요.'); openSheet(); return null; }
+      if (!E.ready()) { T.prep = true; show(); }
+      return E.init().then(function (inf) {
+        T.prep = false; if (gen !== S.gen) return null;
+        // 그래픽 가속(WebGPU)이 없으면 PC에서도 문장 하나에 30초 넘게 걸린다(2026-11-07 시험): 미리 알린다
+        if (inf && inf.backend !== 'webgpu' && !T.warned) { T.warned = true; toast('이 기기에서는 느려요, 기기 목소리를 권해요'); }
+        return loadPage(n, gen);
+      });
+    }).then(function (q) {
+      if (!q || gen !== S.gen) return;
+      if (!q.length && !S.carry) {
+        if (S.cont && n < h.pages()) { nextPageSyn(gen); return; }
+        toast('이 쪽에는 읽을 글자가 없어요.'); stop(); return;
+      }
+      playSyn(gen);
+    }).catch(function (e) { T.prep = false; failSyn(e, gen); });
+  }
+  function playSyn(gen) {
+    if (gen !== S.gen || !S.playing || S.paused || S.mode !== 'synth') return;
+    var h = host();
+    if (!h || !h.isOpen() || h.bookId() !== S.book) { stop(); return; }
+    var now = h.page();
+    if (now !== S.page && now !== S.selfTurn) { startSyn(now); return; }           // 사람이 쪽을 넘김 → 그 쪽부터
+    if (S.i >= S.queue.length) {
+      if (S.cont) { nextPageSyn(gen); return; }
+      if (S.carry) { S.queue.push({ text: S.carry, gap: true }); S.carry = ''; }
+      else { stop(); return; }
+    }
+    var it = S.queue[S.i], k = synKey(it), nx = S.queue[S.i + 1];
+    dropSyn([k].concat(nx ? [synKey(nx)] : []).concat(T.np && T.np.k ? [T.np.k] : []));
+    var ready = false;
+    S.loading = true; show();
+    prep(it).then(function (r) {
+      ready = true;
+      if (gen !== S.gen || S.mode !== 'synth') return;
+      if (!T.first) {
+        T.first = r.ms;
+        if (r.ms > SLOW_MS && !T.warned) { T.warned = true; toast('이 기기에서는 느려요, 기기 목소리를 권해요'); }
+      }
+      S.loading = false;
+      if (T.url && T.url !== r.url && T.cur !== k) URL.revokeObjectURL(T.url);
+      T.url = r.url; T.cur = k;
+      show();
+      if (S.paused) return;               // 합성 중에 멈춤을 눌렀으면 소리만 준비해 둔다
+      au.src = r.url; au.playbackRate = 1;
+      var p = au.play();
+      if (p && p.catch) p.catch(function (e) { if (gen === S.gen && e && e.name === 'NotAllowedError') { S.paused = true; show(); toast('▶를 눌러 들어 주세요.'); } });
+      // 다음 문장 미리 합성. 쪽 끝이면 다음 쪽 첫 문장까지
+      if (nx) prep(nx).catch(noop);
+      else if (S.cont) prefetchPage(gen);
+    }).catch(function (e) {
+      if (gen !== S.gen) return;
+      if (e && e.message === 'cancelled') return;
+      failSyn(e, gen);
+    });
+    setTimeout(function () { if (!ready && gen === S.gen) show(); }, 300);
+  }
+  function prefetchPage(gen) {
+    var h = host(), n = S.page + 1;
+    if (!h || n > h.pages() || (T.np && T.np.n === n)) return;
+    var np = { n: n, k: '' };
+    np.p = readPage(n, S.carry).then(function (r) {
+      if (gen !== S.gen) return r;
+      if (r.q[0]) { np.k = synKey(r.q[0]); prep(r.q[0]).catch(noop); }
+      return r;
+    });
+    np.p.catch(noop);
+    T.np = np;
+  }
+  function nextPageSyn(gen) {
+    var h = host(); if (!h || !h.isOpen() || gen !== S.gen) return;
+    var n = S.page + 1;
+    if (n > h.pages()) { toast('마지막 쪽까지 읽었어요.'); stop(); return; }
+    S.selfTurn = n; h.go(n);
+    var pre = T.np && T.np.n === n ? T.np.p : null; T.np = null;
+    var p = pre ? pre.then(function (r) { if (gen !== S.gen) return null; S.page = n; S.queue = r.q; S.carry = r.carry; S.i = 0; S.loading = false; return r.q; })
+      : loadPage(n, gen);
+    p.then(function (q) {
+      if (!q || gen !== S.gen) return;
+      if (!q.length && !S.carry) { nextPageSyn(gen); return; }
+      playSyn(gen);
+    }).catch(function (e) { failSyn(e, gen); });
+  }
+
   /* ---------- 우리 목소리: 책의 장별 잠긴 오디오 (books/audio/<책>/list.enc · cNNN.enc) ---------- */
   var SILENT = 'data:audio/mpeg;base64,/+MYxAAAAANIAAAAAExBTUU0LjBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/+MYxDsAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV';
   var au = new root.Audio(); au.preload = 'auto';
@@ -425,7 +590,7 @@
   function startOurs() {
     var h = host(); if (!h || !h.isOpen()) { toast(h ? '책을 연 뒤 들을 수 있어요.' : '새 판을 받는 중이에요. 앱을 닫았다 다시 열어 주세요.'); return; }
     unlockAudio();
-    synth.cancel(); clearTimeout(S.timer);
+    stopSyn(); synth.cancel(); clearTimeout(S.timer);
     var gen = ++A.gen, book = h.bookId();
     S.gen++; S.mode = 'ours'; S.book = book; S.playing = true; S.paused = false; S.loading = true; A.list = null; show();
     getList(book).then(function (l) {
@@ -474,6 +639,7 @@
     });
   }
   au.addEventListener('ended', function () {
+    if (S.mode === 'synth') { if (T.url && au.src === T.url && S.playing && !S.paused) { S.i++; playSyn(S.gen); } return; }
     if (S.mode !== 'ours' || !A.list) return;
     var nx = stepChapter(A.list, A.i, 1);
     if (S.cont && nx >= 0) { setPos(A.book, nx, 0); playChapter(nx, 0); return; }
@@ -485,6 +651,7 @@
     var now = Date.now(); if (now - A.saveT > 4000) { A.saveT = now; setPos(A.book, A.i, au.currentTime); }
   });
   au.addEventListener('error', function () {
+    if (S.mode === 'synth' && T.url && au.src === T.url) { failSyn(new Error('audio'), S.gen); return; }
     if (S.mode !== 'ours' || S.loading || !A.url || au.src !== A.url) return;
     toast('이 장을 재생하지 못했어요.'); stop();
   });
@@ -498,16 +665,23 @@
   // 멈춤: 안드로이드 크롬의 pause()가 불안정해 지금 문장을 기억해 두고 끊었다가, 다시 누르면 그 문장부터
   function pause() {
     S.paused = true; clearTimeout(S.timer);
-    if (S.mode === 'ours') { au.pause(); if (A.list) setPos(A.book, A.i, au.currentTime); } else synth.cancel();
+    if (S.mode === 'ours') { au.pause(); if (A.list) setPos(A.book, A.i, au.currentTime); }
+    else if (S.mode === 'synth') { try { au.pause(); } catch (e) {} }
+    else synth.cancel();
     show();
   }
   function resume() {
     if (!S.paused) return; S.paused = false; S.playing = true; show();
     if (S.mode === 'ours') { var p = au.play(); if (p && p.catch) p.catch(function () { S.paused = true; show(); }); }
+    else if (S.mode === 'synth') {
+      var it = S.queue[S.i];
+      if (it && T.url && au.src === T.url && T.cur === synKey(it) && au.currentTime > 0 && !au.ended) { var p2 = au.play(); if (p2 && p2.catch) p2.catch(function () { S.paused = true; show(); }); }
+      else playSyn(S.gen);
+    }
     else speakNext(S.gen);
   }
-  function stop() { stopOurs(); S.gen++; S.mode = ''; S.playing = false; S.paused = false; S.loading = false; clearTimeout(S.timer); synth.cancel(); S.queue = []; S.i = 0; S.carry = ''; S.selfTurn = 0; show(); }
-  function start() { var h = host(); if (S.src === 'ours') startOurs(); else startAt(h && h.isOpen() ? h.page() : 1); }
+  function stop() { stopOurs(); stopSyn(); S.gen++; S.mode = ''; S.playing = false; S.paused = false; S.loading = false; clearTimeout(S.timer); synth.cancel(); S.queue = []; S.i = 0; S.carry = ''; S.selfTurn = 0; show(); }
+  function start() { var h = host(), n = h && h.isOpen() ? h.page() : 1; if (S.src === 'synth' && E) startSyn(n); else if (S.src === 'ours') startOurs(); else startAt(n); }
 
   btn.addEventListener('click', function () { if (S.playing || S.paused || S.loading) { stop(); return; } start(); });
   mainB.addEventListener('click', function () { if (S.playing && !S.paused) pause(); else if (S.paused) resume(); else start(); });
@@ -522,6 +696,7 @@
   rateSel.addEventListener('change', function () {
     S.rate = parseFloat(rateSel.value) || 0.9; save();
     if (S.mode === 'ours') au.playbackRate = playRate(S.rate);
+    else if (S.mode === 'synth') { if (S.playing) toast('다음 문장부터 이 빠르기로 읽어요.'); }
     else if (S.playing && !S.paused) { synth.cancel(); speakNext(S.gen); }
   });
 
@@ -547,24 +722,79 @@
   function openSheet() {
     var h = host(), book = h && h.isOpen() ? h.bookId() : '';
     noteEl.textContent = '플리니우스 편지 앞부분을 2분쯤 들어 볼 수 있어요.';
-    sheet.hidden = false; showVoice();
+    sheet.hidden = false; showVoice(); refreshSyn();
     var mark = function (l) {
-      Array.prototype.forEach.call(sheet.querySelectorAll('.ls-pick i'), function (x) { x.remove(); });
+      Array.prototype.forEach.call(sheet.querySelectorAll('.ls-pick[data-id] i'), function (x) { x.remove(); });
       if (l === undefined || !book) return;
-      if (!l) { noteEl.textContent = '이 책은 아직 우리 목소리 낭독이 없어요. 견본만 들어 볼 수 있어요(플리니우스 편지 앞부분 2분).'; return; }
+      if (!l) { noteEl.textContent = '미리 만든 견본이에요(플리니우스 편지 앞부분 2분). ▶로 들어 보세요.'; return; }
       var s = sampleById(l.voice);
-      noteEl.textContent = '이 책은 우리 목소리 낭독이 있어요(' + l.chapters.length + '장' + (s ? ', ' + s.name : '') + '). 고르면 장마다 이어서 들려 드려요.';
+      noteEl.textContent = '이 책은 미리 만든 낭독이 있어요(' + l.chapters.length + '장' + (s ? ', ' + s.name : '') + '). 고르면 장마다 이어서 들려 드려요.';
       if (s) { var pick = sheet.querySelector('.ls-pick[data-id="' + s.id + '"] b'); if (pick) { var tag = doc.createElement('i'); tag.textContent = '이 책 낭독'; pick.appendChild(tag); } }
     };
     if (book) getList(book).then(mark, function () { mark(undefined); });
     var cur = sheet.querySelector('[aria-checked="true"]'); setTimeout(function () { (cur || sheet.querySelector('.ls-close')).focus(); }, 60);
   }
   function closeSheet() { stopPreview(); sheet.hidden = true; vBtn.focus(); }
+
+  /* ---------- 우리 목소리 받기(처음 한 번, 약 422MB) ---------- */
+  var getB = sheet.querySelector('.ls-get'), progW = sheet.querySelector('.ls-prog'), progB = progW && progW.querySelector('progress'),
+    progT = progW && progW.querySelector('.ls-pt'), synNote = sheet.querySelector('.ls-synnote'), synList = sheet.querySelector('.ls-synlist');
+  function mbs(b) { return Math.round(b / 1e6); }
+  function refreshSyn() {
+    if (!E || !getB) return Promise.resolve();
+    return E.status().then(function (s) {
+      var busy = E.downloading();
+      getB.hidden = s.ready || busy; progW.hidden = !busy;
+      synList.classList.toggle('off', !s.ready);
+      if (s.ready) synNote.textContent = '이 기기에 받아 둔 목소리예요. 어느 책 어느 쪽이든 인터넷 없이 읽어요.' + (E.info() ? ' (' + (E.info().backend === 'webgpu' ? '그래픽 가속' : '기본 계산') + ')' : '');
+      else {
+        synNote.textContent = '어느 책 어느 쪽이든 이 기기 안에서 바로 읽어요. 처음 한 번 목소리를 받아야 해요. ▶는 미리 만든 견본이에요.';
+        getB.textContent = s.have > 0 ? '이어 받기(' + mbs(s.have) + ' / ' + E.totalMB + 'MB 받아 둠)' : '우리 목소리 받기(약 ' + E.totalMB + 'MB, 와이파이 권장)';
+      }
+      if (s.noCache) { getB.disabled = true; synNote.textContent = '이 브라우저에서는 우리 목소리를 받을 수 없어요. 기기 목소리를 써 주세요.'; }
+      return s;
+    });
+  }
+  function getVoices() {
+    if (!E || E.downloading()) return;
+    getB.hidden = true; progW.hidden = false; progB.value = 0; progT.textContent = '받을 준비…';
+    E.download(function (done, total) {
+      progB.value = Math.floor(done / total * 100);
+      progT.textContent = mbs(done) + ' / ' + mbs(total) + 'MB';
+    }).then(function () {
+      progT.textContent = '받았어요'; toast('우리 목소리를 받았어요. 이제 어느 쪽이든 읽어요.');
+      refreshSyn();
+    }, function (e) {
+      console.warn('listen download', e);
+      var m = e && e.message;
+      toast(e && e.name === 'AbortError' ? '받기를 멈췄어요. 다음에 이어 받을 수 있어요.' :
+        m === 'space' ? '저장 공간이 모자라요(약 ' + e.needMB + 'MB 더 필요해요).' :
+        m === 'size' ? '받은 파일 크기가 맞지 않아요. 다시 받아 주세요.' : '받지 못했어요. 인터넷을 확인해 주세요.');
+      refreshSyn();
+    });
+  }
   vBtn.addEventListener('click', openSheet);
   sheet.addEventListener('click', function (e) {
     if (e.target === sheet || e.target.closest('.ls-close')) { closeSheet(); return; }
     var t = e.target.closest('.ls-try'); if (t) { preview(t.getAttribute('data-try'), t); return; }
-    var p = e.target.closest('.ls-pick');
+    if (e.target.closest('.ls-get')) { getVoices(); return; }
+    if (e.target.closest('.ls-cancel')) { if (E) E.cancelDownload(); return; }
+    var sp = e.target.closest('.ls-pick[data-syn]');
+    if (sp) {
+      stopPreview();
+      var was = S.mode, wasPlaying = S.playing || S.paused;
+      S.src = 'synth'; S.syn = sp.getAttribute('data-syn'); save(); showVoice();
+      E.status().then(function (st) {
+        if (!st.ready) { toast('먼저 "우리 목소리 받기"를 눌러 주세요.'); return; }
+        var h = host();
+        if (was === 'synth' && wasPlaying) {     // 읽는 중에 목소리만 바꿈: 지금 문장부터 새 목소리로
+          try { au.pause(); } catch (er) {}
+          var gen = ++S.gen; S.paused = false; S.playing = true; T.first = 0; T.peak = 0; playSyn(gen);
+        } else if (wasPlaying && h && h.isOpen()) startSyn(h.page());
+      });
+      return;
+    }
+    var p = e.target.closest('.ls-pick[data-id]');
     if (p) {
       stopPreview();
       S.src = 'ours'; S.ours = p.getAttribute('data-id'); save(); showVoice();
@@ -596,11 +826,13 @@
 
   pickVoice();
   if (hasSynth && typeof synth.onvoiceschanged !== 'undefined') synth.addEventListener('voiceschanged', pickVoice);
-  root.MJListen = { core: Core, start: startAt, startOurs: startOurs, pause: pause, resume: resume, stop: stop, openVoices: openSheet,
+  root.MJListen = { core: Core, start: startAt, startOurs: startOurs, startSyn: startSyn, pause: pause, resume: resume, stop: stop, openVoices: openSheet,
+    synLog: function () { return T.log.slice(); },
     state: function () {
       var c = A.list && A.list.chapters[A.i];
       return { mode: S.mode, src: S.src, ours: S.ours, playing: S.playing, paused: S.paused, loading: S.loading, page: S.page, i: S.i, n: S.queue.length, cont: S.cont, speaking: synth.speaking,
         text: S.queue[S.i] && S.queue[S.i].text, chapter: S.mode === 'ours' ? A.i : -1, chapterTitle: c ? c.title : '', chapters: A.list ? A.list.chapters.length : 0,
-        audioTime: au.currentTime, audioPaused: au.paused, rate: au.playbackRate, preview: pvId, previewTime: pv.currentTime, previewPaused: pv.paused };
+        audioTime: au.currentTime, audioPaused: au.paused, rate: au.playbackRate, preview: pvId, previewTime: pv.currentTime, previewPaused: pv.paused,
+        syn: S.syn, synReady: !!(E && E.ready()), synBackend: E && E.info() ? E.info().backend : '', synFirstMs: T.first, synPrep: T.prep, audioDur: au.duration };
     } };
 })(typeof window !== 'undefined' ? window : this);

@@ -1,12 +1,13 @@
 /* victorview 밑줄펜 service worker — 앱 껍데기 + 연 책을 저장해 오프라인에서도 읽고 밑줄 긋기 */
-var VERSION = 'mj-v19';
+var VERSION = 'mj-v20';
 var SHELL = VERSION + '-shell';
 var BOOKS = 'mj-books-v2'; // 잠긴 .enc만 (풀린 PDF는 저장하지 않음)
 var AUDIO = 'mj-audio-v1'; // 우리 목소리 낭독: 잠긴 장 오디오(books/audio/<책>/cNNN.enc)·목록(list.enc)만 (풀린 소리는 저장하지 않음)
 var SAMPLES = 'mj-samples-v1'; // 목소리 견본 audio/samples/*.mp3 (공개 견본, 한 번 들으면 오프라인)
+var VOICE = 'mj-voice-model-v1'; // 우리 목소리 모델(Supertonic 3, Hugging Face에서 직접 받음)·onnxruntime-web. js/voice-engine.js 가 넣고 읽는다. 판이 바뀌어도 지우지 않는다
 var CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 var SHELL_FILES = [
-  './', 'index.html', 'css/app.css', 'js/app.js', 'js/listen.js', 'js/books.js', 'manifest.webmanifest', 'icons/icon.svg',
+  './', 'index.html', 'css/app.css', 'js/app.js', 'js/listen.js', 'js/voice-engine.js', 'js/voice-worker.js', 'js/books.js', 'manifest.webmanifest', 'icons/icon.svg',
   CDN + 'pdf.min.js', CDN + 'pdf.worker.min.js'
 ];
 
@@ -20,7 +21,7 @@ self.addEventListener('install', function (e) {
 
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (keys) {
-    return Promise.all(keys.filter(function (k) { return k !== SHELL && k !== BOOKS && k !== AUDIO && k !== SAMPLES && k.indexOf('mj-') === 0; }).map(function (k) { return caches.delete(k); }));
+    return Promise.all(keys.filter(function (k) { return k !== SHELL && k !== BOOKS && k !== AUDIO && k !== SAMPLES && k !== VOICE && k.indexOf('mj-') === 0; }).map(function (k) { return caches.delete(k); }));
   }).then(function () { return self.clients.claim(); }));
 });
 
@@ -101,6 +102,11 @@ self.addEventListener('fetch', function (e) {
   // 잠긴 책(.enc): 저장본 먼저(한 번 연 책은 오프라인에서도). ?v= 가 바뀌면(다시 잠금) 새로 받고 옛것은 지운다.
   if (url.origin === location.origin && /\/books\/.+\.enc$/.test(url.pathname)) {
     e.respondWith(cacheFirstVersioned(req, url, BOOKS));
+    return;
+  }
+  // 우리 목소리 런타임(onnxruntime-web 고정 판): voice-engine.js 가 받아 둔 저장본 먼저(오프라인 합성). 없으면 그대로 인터넷에서
+  if (url.href.indexOf('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/') === 0) {
+    e.respondWith(caches.open(VOICE).then(function (c) { return c.match(req.url, { ignoreSearch: true }); }).then(function (hit) { return hit || fetch(req); }));
     return;
   }
   // PDF.js(고정 버전)와 글꼴: 저장본 먼저
