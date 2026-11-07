@@ -116,7 +116,7 @@
   if (!doc || !synth || typeof root.SpeechSynthesisUtterance === 'undefined') return; // 읽기 기능이 없는 기기: 단추를 만들지 않는다
 
   var KEY = 'mj:listen', PITCH = 0.95;
-  var PITCH_BY = { f: 1.0, m: 0.95 }; // 부드러운 책 읽기: 여자는 원래 높이, 남자는 살짝 낮게(2026-11-07 시장)
+  var PITCH_BY = { f: 0.92, m: 0.95 }; // 부드러운 책 읽기: 여자는 원래 높이, 남자는 살짝 낮게(2026-11-07 시장)
   var saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
   var S = { queue: [], i: 0, page: 0, book: '', playing: false, paused: false, loading: false, voice: null,
     rate: saved.rate || 0.9, gender: saved.gender || 'f', cont: saved.cont !== false, carry: '', heads: {}, timer: null, gen: 0, selfTurn: 0 };
