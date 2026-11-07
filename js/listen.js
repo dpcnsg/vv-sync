@@ -196,7 +196,7 @@
     '.lsbar button,.lsbar select{min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink);font:inherit;cursor:pointer}' +
     '.lsbar button{min-width:44px;font-size:17px;padding:0 8px}' +
     '.lsbar .ls-main{background:var(--dahong);border-color:var(--dahong);color:#fff}' +
-    '.lsbar .ls-cont,.lsbar .ls-vbtn{font-size:13px;font-weight:700}.lsbar .ls-cont[aria-pressed="true"]{background:#FFF4F1;border-color:var(--dahong);color:var(--dahong)}' +
+    '.lsbar .ls-cont,.lsbar .ls-vbtn{font-size:13px;font-weight:700}.lsbar .ls-vbtn{border-color:var(--dahong);color:var(--dahong);white-space:nowrap}.lsbar .ls-cont[aria-pressed="true"]{background:#FFF4F1;border-color:var(--dahong);color:var(--dahong)}' +
     '.lsbar select{padding:0 4px;max-width:30%}' +
     '.lsbar .ls-t{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--ink-2)}' +
     '.lsbar.ours{flex-wrap:wrap}.lsbar.ours .ls-t{flex:1 0 100%;order:-1;padding:0 4px}' +
@@ -297,7 +297,7 @@
   function synActive() { return S.mode ? S.mode === 'synth' : S.src === 'synth'; }
   function showVoice() {
     var sv = E && E.voiceById(S.syn);
-    vBtn.textContent = synActive() ? '우리' : oursActive() ? '견본' : (S.gender === 'm' ? '남자' : '여자');
+    vBtn.textContent = synActive() ? ('🎙 ' + (sv ? String(sv.name).split(' ')[0] : '우리')) : oursActive() ? '🎙 견본' : '🎙 목소리';  // 11/7 시장: 단추가 무엇인지 알 수 있게
     vBtn.setAttribute('aria-label', '목소리 고르기 (지금: ' + (synActive() ? '우리 목소리 ' + (sv ? sv.name : '') : oursActive() ? '견본 ' + (sampleById(S.ours) || {}).name : '기기 ' + vBtn.textContent) + ')');
     Array.prototype.forEach.call(sheet.querySelectorAll('[data-dev]'), function (b) { b.setAttribute('aria-checked', S.src === 'device' && b.getAttribute('data-dev') === S.gender ? 'true' : 'false'); b.disabled = !hasSynth; });
     Array.prototype.forEach.call(sheet.querySelectorAll('.ls-pick[data-id]'), function (b) { b.setAttribute('aria-checked', S.src === 'ours' && b.getAttribute('data-id') === S.ours ? 'true' : 'false'); });
@@ -683,7 +683,13 @@
   function stop() { stopOurs(); stopSyn(); S.gen++; S.mode = ''; S.playing = false; S.paused = false; S.loading = false; clearTimeout(S.timer); synth.cancel(); S.queue = []; S.i = 0; S.carry = ''; S.selfTurn = 0; show(); }
   function start() { var h = host(), n = h && h.isOpen() ? h.page() : 1; if (S.src === 'synth' && E) startSyn(n); else if (S.src === 'ours') startOurs(); else startAt(n); }
 
-  btn.addEventListener('click', function () { if (S.playing || S.paused || S.loading) { stop(); return; } start(); });
+  btn.addEventListener('click', function () {
+    if (S.playing || S.paused || S.loading) { stop(); return; }
+    start();
+    // 처음 한 번은 목소리 창을 열어 '우리 목소리 받기'를 보여 준다(11/7 시장 "계속 그전 목소리만 나온다")
+    var asked = false; try { asked = localStorage.getItem('mj:listen:asked') === '1'; } catch (e) {}
+    if (!asked && E && S.src !== 'synth') { try { localStorage.setItem('mj:listen:asked', '1'); } catch (e) {} setTimeout(function () { openSheet(); toast('우리 목소리는 여기서 받아 고를 수 있어요.'); }, 400); }
+  });
   mainB.addEventListener('click', function () { if (S.playing && !S.paused) pause(); else if (S.paused) resume(); else start(); });
   stopB.addEventListener('click', stop);
   prevB.addEventListener('click', function () { var j = stepChapter(A.list, A.i, -1); if (j >= 0) playChapter(j, 0); });
