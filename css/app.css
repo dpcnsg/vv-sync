@@ -371,3 +371,8 @@ button.cs.bad { color: var(--dahong); font-weight: 700; }
 .ccard { padding-bottom: 4px; }
 .ccard[role=button] { -webkit-tap-highlight-color: rgba(200,69,59,.08); }
 .books .t small.allline { display: inline-block; padding: 6px 10px 6px 0; margin: -2px 0; cursor: pointer; text-decoration: underline; text-decoration-color: rgba(59,76,140,.35); text-underline-offset: 3px; }
+
+/* 글씨 크기 작은 창 (2026-11-07 시장 "아래 단추가 많아 정리") */
+.fontpop{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--tools-h) + var(--safe-b) + 8px);z-index:60;display:flex;gap:4px;padding:6px;background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:0 4px 18px rgba(40,30,10,.14)}
+.fontpop[hidden]{display:none}
+.fontpop .tool{min-width:64px}

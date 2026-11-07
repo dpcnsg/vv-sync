@@ -123,7 +123,7 @@
   function save() { try { localStorage.setItem(KEY, JSON.stringify({ rate: S.rate, cont: S.cont, voice: S.voice && S.voice.name })); } catch (e) {} }
 
   var css =
-    '.tools{grid-template-columns:repeat(9,1fr)}' +
+    '.tools{grid-template-columns:repeat(8,1fr)}' +
     '.tool#listenBtn[aria-pressed="true"]{color:var(--dahong);font-weight:700;box-shadow:inset 0 -3px 0 var(--dahong);background:#fff}' +
     '.lsbar{position:fixed;left:8px;right:8px;bottom:calc(var(--tools-h) + var(--safe-b) + 8px);z-index:28;max-width:560px;margin:0 auto;display:flex;align-items:center;gap:6px;padding:6px 8px;background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-layer);font-size:13px;color:var(--ink)}' +
     'body.paged .lsbar{bottom:calc(var(--tools-h) + var(--safe-b) + 58px)}' +
@@ -205,7 +205,7 @@
   }
 
   function startAt(n) {
-    var h = host(); if (!h || !h.isOpen()) { toast('책을 연 뒤 들을 수 있어요.'); return; }
+    var h = host(); if (!h || !h.isOpen()) { toast(h ? '책을 연 뒤 들을 수 있어요.' : '새 판을 받는 중이에요. 앱을 닫았다 다시 열어 주세요.'); return; }
     synth.cancel(); clearTimeout(S.timer);
     var gen = ++S.gen; S.book = h.bookId(); S.carry = ''; S.playing = true; S.paused = false;
     loadPage(n, gen).then(function (q) {
