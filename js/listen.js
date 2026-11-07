@@ -196,7 +196,7 @@
     '.lsbar button,.lsbar select{min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink);font:inherit;cursor:pointer}' +
     '.lsbar button{min-width:44px;font-size:17px;padding:0 8px}' +
     '.lsbar .ls-main{background:var(--dahong);border-color:var(--dahong);color:#fff}' +
-    '.lsbar .ls-cont,.lsbar .ls-vbtn{font-size:13px;font-weight:700}.lsbar .ls-vbtn{border-color:var(--dahong);color:var(--dahong);white-space:nowrap}.lsbar .ls-cont[aria-pressed="true"]{background:#FFF4F1;border-color:var(--dahong);color:var(--dahong)}' +
+    '#lsSheet .ls-sec:not(.ls-syn){display:none}.lsbar .ls-cont,.lsbar .ls-vbtn{font-size:13px;font-weight:700}.lsbar .ls-vbtn{border-color:var(--dahong);color:var(--dahong);white-space:nowrap}.lsbar .ls-cont[aria-pressed="true"]{background:#FFF4F1;border-color:var(--dahong);color:var(--dahong)}' +
     '.lsbar select{padding:0 4px;max-width:30%}' +
     '.lsbar .ls-t{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--ink-2)}' +
     '.lsbar.ours{flex-wrap:wrap}.lsbar.ours .ls-t{flex:1 0 100%;order:-1;padding:0 4px}' +
