@@ -1,5 +1,5 @@
 /* victorview 밑줄펜 service worker — 앱 껍데기 + 연 책을 저장해 오프라인에서도 읽고 밑줄 긋기 */
-var VERSION = 'mj-v22';
+var VERSION = 'mj-v23';
 var SHELL = VERSION + '-shell';
 var BOOKS = 'mj-books-v2'; // 잠긴 .enc만 (풀린 PDF는 저장하지 않음)
 var AUDIO = 'mj-audio-v1'; // 우리 목소리 낭독: 잠긴 장 오디오(books/audio/<책>/cNNN.enc)·목록(list.enc)만 (풀린 소리는 저장하지 않음)

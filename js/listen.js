@@ -196,7 +196,7 @@
     '.lsbar button,.lsbar select{min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink);font:inherit;cursor:pointer}' +
     '.lsbar button{min-width:44px;font-size:17px;padding:0 8px}' +
     '.lsbar .ls-main{background:var(--dahong);border-color:var(--dahong);color:#fff}' +
-    '#lsSheet .ls-sec:not(.ls-syn){display:none}.lsbar .ls-cont,.lsbar .ls-vbtn{font-size:13px;font-weight:700}.lsbar .ls-vbtn{border-color:var(--dahong);color:var(--dahong);white-space:nowrap}.lsbar .ls-cont[aria-pressed="true"]{background:#FFF4F1;border-color:var(--dahong);color:var(--dahong)}' +
+    '#lsSheet .ls-sec:not(.ls-syn):not(.ls-new){display:none}.lsbar .ls-cont,.lsbar .ls-vbtn{font-size:13px;font-weight:700}.lsbar .ls-vbtn{border-color:var(--dahong);color:var(--dahong);white-space:nowrap}.lsbar .ls-cont[aria-pressed="true"]{background:#FFF4F1;border-color:var(--dahong);color:var(--dahong)}' +
     '.lsbar select{padding:0 4px;max-width:30%}' +
     '.lsbar .ls-t{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--ink-2)}' +
     '.lsbar.ours{flex-wrap:wrap}.lsbar.ours .ls-t{flex:1 0 100%;order:-1;padding:0 4px}' +
@@ -215,7 +215,8 @@
     '.ls-dl{display:flex;flex-direction:column;gap:6px}.ls-get{min-height:48px;border:1px solid var(--dahong);border-radius:12px;background:var(--dahong);color:#fff;font:inherit;font-weight:700;cursor:pointer;padding:0 12px}' +
     '.ls-prog{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)}.ls-prog progress{flex:1;min-width:0;height:10px;accent-color:var(--dahong)}' +
     '.ls-prog button{flex:none;min-height:44px;min-width:56px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit;cursor:pointer}' +
-    '.ls-list.off .ls-pick{opacity:.55}.ls-sec.ls-old h3{color:var(--ink-2)}';
+    '.ls-list.off .ls-pick{opacity:.55}.ls-sec.ls-old h3{color:var(--ink-2)}' +
+    '.ls-new .ls-pick{cursor:default}a.ls-try{display:flex;align-items:center;justify-content:center;text-decoration:none}';
   var st = doc.createElement('style'); st.textContent = css; doc.head.appendChild(st);
 
   // 도구 줄 단추 (쪽 이동 단추 앞)
@@ -255,6 +256,16 @@
         '<button type="button" class="ls-try" data-try="' + v.sample + '" aria-pressed="false" aria-label="' + v.name + ' 미리 듣기">▶</button></li>';
     }).join('') + '</ul>' +
     '<p class="ls-ai">AI 음성으로 읽었습니다.</p></section>' : '') +
+    // 2026-11-08 시장 "펜에도 다운로드": 소란님 의견(덜 비장하게)으로 만든 부드러운 견본 2개 — 듣기 ▶ · 내려받기 ⬇
+    '<section class="ls-sec ls-new"><h3>새 견본 · 부드럽게<small>AI 음성</small></h3><p class="muted">말끝 힘을 뺀 견본이에요. ▶로 듣고 ⬇로 내려받을 수 있어요.</p>' +
+    '<ul class="ls-list">' + [
+      { id: 's1', name: '부드1 · 가장 고르게', note: '높낮이가 고르고 말끝이 가장 부드러워요' },
+      { id: 's3', name: '부드3 · 낮게 부드럽게', note: '낮은 목소리에 부드러운 음색을 섞었어요' }
+    ].map(function (s) {
+      return '<li><div class="ls-pick"><b>' + s.name + '</b><span>' + s.note + '</span></div>' +
+        '<button type="button" class="ls-try" data-try="' + s.id + '" aria-pressed="false" aria-label="' + s.name + ' 듣기">▶</button>' +
+        '<a class="ls-try" href="audio/samples/' + s.id + '.mp3" download="밑줄펜-' + s.name.split(' ')[0] + '.mp3" aria-label="' + s.name + ' 내려받기">⬇</a></li>';
+    }).join('') + '</ul></section>' +
     '<section class="ls-sec ls-old"><h3>견본 듣기<small>AI 음성</small></h3><p class="muted ls-note"></p>' +
     '<ul class="ls-list" role="radiogroup" aria-label="견본 목소리">' + SAMPLES.map(function (s) {
       return '<li><button type="button" class="ls-pick" role="radio" data-id="' + s.id + '"><b>' + s.name + '</b><span>' + s.note + '</span></button>' +
@@ -708,7 +719,7 @@
 
   /* ---------- 목소리 고르기 창 ---------- */
   var pv = new root.Audio(), pvId = '', pvUrls = {};
-  function stopPreview() { try { pv.pause(); } catch (e) {} pvId = ''; Array.prototype.forEach.call(sheet.querySelectorAll('.ls-try'), function (b) { b.setAttribute('aria-pressed', 'false'); b.textContent = '▶'; }); }
+  function stopPreview() { try { pv.pause(); } catch (e) {} pvId = ''; Array.prototype.forEach.call(sheet.querySelectorAll('button.ls-try'), function (b) { b.setAttribute('aria-pressed', 'false'); b.textContent = '▶'; }); }
   pv.addEventListener('ended', stopPreview);
   function preview(id, b) {
     if (pvId === id) { stopPreview(); return; }
@@ -782,7 +793,7 @@
   vBtn.addEventListener('click', openSheet);
   sheet.addEventListener('click', function (e) {
     if (e.target === sheet || e.target.closest('.ls-close')) { closeSheet(); return; }
-    var t = e.target.closest('.ls-try'); if (t) { preview(t.getAttribute('data-try'), t); return; }
+    var t = e.target.closest('button.ls-try'); if (t) { preview(t.getAttribute('data-try'), t); return; }
     if (e.target.closest('.ls-get')) { getVoices(); return; }
     if (e.target.closest('.ls-cancel')) { if (E) E.cancelDownload(); return; }
     var sp = e.target.closest('.ls-pick[data-syn]');
